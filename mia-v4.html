@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mia – amiga de inglês (Gemini)</title>
+<style>
+:root{--bg:#fff7fb;--card:#fff;--ink:#2a2230;--mut:#7a6d85;--pink:#e0488f;--pink2:#ffd9ec;--me:#e0488f;--ok:#1f9d6b;--okbg:#e3f7ee;--bd:#f0dce8;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root{--bg:#1a1420;--card:#2a2132;--ink:#f4eaf8;--mut:#b3a3bf;--pink:#ff6aa9;--pink2:#4a2a3d;--me:#c43a7c;--ok:#5fe0a8;--okbg:#18382c;--bd:#3b2f45}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;max-width:640px;margin:0 auto}
+header{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--bd)}
+.av{width:42px;height:42px;border-radius:50%;background:var(--pink2);display:grid;place-items:center;font-size:24px}
+header small{color:var(--mut)}.sp{flex:1}
+button{font:inherit;color:inherit;cursor:pointer}
+.ib{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:6px 10px}
+#log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.b{max-width:86%;padding:10px 13px;border-radius:16px;background:var(--card);border:1px solid var(--bd);align-self:flex-start}
+.b.me{align-self:flex-end;background:var(--me);color:#fff;border-color:transparent}
+.pt{color:var(--mut);font-size:.92em;margin-top:4px}
+.fix{margin-top:8px;padding:8px 10px;border-radius:12px;background:var(--okbg);font-size:.95em}
+.fix s{opacity:.7}.fix b{color:var(--ok)}
+.rep{background:none;border:0;color:var(--pink);padding:4px 0 0;font-size:.9em}
+.sys{align-self:center;color:var(--mut);font-size:.9em;text-align:center}
+footer{padding:10px 12px;border-top:1px solid var(--bd);background:var(--bg)}
+#live{min-height:20px;color:var(--mut);font-size:.92em;padding:0 4px 6px}
+.row{display:flex;gap:8px;align-items:center}
+input{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--ink);border-radius:12px;padding:10px 12px;min-width:0;width:100%}
+#txt{flex:1;border-radius:22px;padding:11px 14px}
+#mic{width:56px;height:56px;border-radius:50%;border:0;background:var(--pink);color:#fff;font-size:24px;flex:none}
+#mic.on{animation:p 1s infinite}
+@keyframes p{50%{box-shadow:0 0 0 10px color-mix(in srgb,var(--pink) 30%,transparent)}}
+#go{border:0;background:var(--pink2);border-radius:50%;width:44px;height:44px;flex:none}
+#cfg{display:none;padding:12px 14px;border-bottom:1px solid var(--bd);background:var(--card);gap:8px;flex-direction:column}
+#cfg.open{display:flex}#cfg label{font-size:.85em;color:var(--mut)}
+#cfg a{color:var(--pink)}
+</style>
+</head>
+<body>
+<header>
+  <div class="av">👧</div>
+  <div><b>Mia</b><br><small>sua amiga de inglês · v4</small></div>
+  <div class="sp"></div>
+  <button class="ib" id="lang">🎙 EN</button>
+  <button class="ib" id="slow">🐢 não</button>
+  <button class="ib" id="gear">⚙️</button>
+</header>
+<div id="cfg">
+  <label>Chave da API do Gemini (fica só neste aparelho)</label>
+  <input id="key" type="password" placeholder="AIza…" autocomplete="off">
+  <label>Modelo</label>
+  <input id="model" value="gemini-2.5-flash">
+  <small class="pt">Crie a chave grátis em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Se o modelo deixar de funcionar, troque o nome aqui.</small>
+  <button class="ib" id="save">Salvar</button>
+</div>
+<div id="log"></div>
+<footer>
+  <div id="live"></div>
+  <div class="row">
+    <input id="txt" placeholder="Fale ou escreva em inglês…" autocomplete="off">
+    <button id="go" title="Enviar">➤</button>
+    <button id="mic" title="Falar">🎤</button>
+  </div>
+</footer>
+<script>
+const $=s=>document.querySelector(s),log=$('#log'),txt=$('#txt'),live=$('#live'),mic=$('#mic');
+let history=[],rec=null,listening=false,buf='',busy=false,slow=false,voices=[];
+const store={get(k,d){try{return localStorage.getItem(k)||d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+$('#key').value=store.get('mia_key','');$('#model').value=store.get('mia_model','gemini-2.5-flash');
+if(!$('#key').value)$('#cfg').classList.add('open');
+$('#gear').onclick=()=>$('#cfg').classList.toggle('open');
+$('#save').onclick=()=>{store.set('mia_key',$('#key').value.trim());store.set('mia_model',$('#model').value.trim()||'gemini-2.5-flash');$('#cfg').classList.remove('open');sys('Salvo! Pode falar com a Mia 😄')};
+
+const SYS=`You are Mia, a warm, playful 16-year-old girl chatting by voice with a Brazilian adult who is practicing English. Talk like a real friendly teen: casual, upbeat, light slang used sparingly, short replies (1-3 sentences), always end with an easy question to keep the chat going.
+The learner's speech comes from speech-to-text, so judge grammar, vocabulary and word choice; if a word looks like a pronunciation slip (the transcript is odd), mention how to say it.
+If the learner makes an English mistake, be kind and encouraging, never harsh. Fill "correction". If they write in Portuguese, treat it as "how do I say this?": put the natural English sentence in correction.right.
+IMPORTANT: if the learner's message is in Portuguese (for example "como dizer que estou estressada?"), ALWAYS answer by teaching: put the natural English sentence in correction.right (wrong = their Portuguese phrase), invite them to repeat it, and explain briefly in "pt". Never reply that you did not understand Portuguese.
+If the message looks like nonsense English that is probably Portuguese or English misheard by the microphone (like "yogostatic equation Houston"), do not play along: guess what they probably meant, and kindly tell them in "pt" that the microphone may have misheard; suggest switching the mic to PT with the 🎙 button, or typing.
+"en" is your English reply. "pt" is a very short, friendly Portuguese help line (explain the correction simply, or help if they seem lost); use "" if not needed. Do not repeat the correction inside "en".
+Return ONLY valid JSON: {"en":"...","pt":"...","correction":null or {"wrong":"...","right":"...","why_pt":"..."}}`;
+
+function loadVoices(){voices=speechSynthesis.getVoices()}
+if('speechSynthesis' in window){loadVoices();speechSynthesis.onvoiceschanged=loadVoices}
+function pick(lang){
+  const l=lang.toLowerCase(),n=v=>v.lang.toLowerCase().replace('_','-');
+  const c=voices.filter(v=>n(v).startsWith(l.slice(0,2))),ex=c.filter(v=>n(v)===l),pool=ex.length?ex:c;
+  return pool.find(v=>/samantha|google|zira|luciana|francisca|female|aria|joana/i.test(v.name))||pool[0]||null;
+}
+function say(parts){
+  if(!('speechSynthesis' in window))return;
+  speechSynthesis.cancel();
+  parts.forEach(([t,lang,rate])=>{if(!t)return;const u=new SpeechSynthesisUtterance(t);u.lang=lang;const v=pick(lang);if(v)u.voice=v;u.rate=(rate||1)*(slow?.8:1);u.pitch=1.15;speechSynthesis.speak(u)});
+}
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function add(cls,html){const d=document.createElement('div');d.className='b '+cls;d.innerHTML=html;log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
+function sys(t){const d=document.createElement('div');d.className='sys';d.textContent=t;log.appendChild(d);log.scrollTop=log.scrollHeight}
+function speakReply(r){const p=[];if(r.correction&&r.correction.right)p.push([r.correction.right,'en-US',.7],[r.correction.right,'en-US',.95]);p.push([r.en,'en-US',1]);if(r.pt)p.push([r.pt,'pt-BR',1]);say(p)}
+function render(r){
+  let h=`<div>${esc(r.en)}</div>`;
+  if(r.pt)h+=`<div class="pt">🇧🇷 ${esc(r.pt)}</div>`;
+  if(r.correction&&r.correction.right){const c=r.correction;h+=`<div class="fix">💡 ${c.wrong?`<s>${esc(c.wrong)}</s><br>`:''}<b>${esc(c.right)}</b>${c.why_pt?`<div class="pt">${esc(c.why_pt)}</div>`:''}</div>`}
+  h+=`<button class="rep">🔊 ouvir de novo</button>`;
+  add('',h).querySelector('.rep').onclick=()=>speakReply(r);
+}
+
+async function findModel(key){
+  try{
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key='+encodeURIComponent(key));
+    if(!r.ok)return null;
+    const j=await r.json();
+    const ok=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent')&&/^models\/gemini-[\d.]+-flash(-lite)?$/.test(m.name));
+    const ver=n=>parseFloat(n.match(/gemini-([\d.]+)/)[1]);
+    ok.sort((a,b)=>(/lite/.test(b.name)-/lite/.test(a.name))||ver(b.name)-ver(a.name));
+    return ok.length?ok[0].name.replace('models/',''):null;
+  }catch(e){return null}
+}
+async function ask(){
+  const key=store.get('mia_key',''),model=store.get('mia_model','gemini-2.5-flash');
+  if(!key){$('#cfg').classList.add('open');throw new Error('nokey')}
+  let h=history.slice(-16);while(h.length&&h[0].role!=='user')h=h.slice(1);
+  const contents=h.map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.content}]}));
+  const call=m=>fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(key)}`,{
+    method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(30000),
+    body:JSON.stringify({systemInstruction:{parts:[{text:SYS}]},contents,generationConfig:{responseMimeType:'application/json',temperature:0.9}})
+  });
+  let res=await call(model);
+  if(res.status===404){
+    const m=await findModel(key);
+    if(m&&m!==model){store.set('mia_model',m);$('#model').value=m;res=await call(m)}
+  }
+  if(!res.ok){const e=new Error('http');e.status=res.status;throw e}
+  const j=await res.json();
+  const t=(j.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').replace(/```json|```/g,'').trim();
+  if(!t)throw new Error('vazio');
+  try{return JSON.parse(t.slice(t.indexOf('{'),t.lastIndexOf('}')+1))}
+  catch(e){return {en:t,pt:'',correction:null}}
+}
+async function askRetry(){
+  let err;
+  for(let i=0;i<3;i++){
+    try{return await ask()}
+    catch(e){err=e;if(e.message==='nokey'||(e.status&&e.status<500&&e.status!==429))break;await new Promise(s=>setTimeout(s,1200*(i+1)))}
+  }
+  throw err;
+}
+async function send(text){
+  text=(text||'').trim();if(!text||busy)return;
+  busy=true;txt.value='';live.textContent='';add('me',esc(text));
+  const th=add('','<span class="pt">Mia está digitando…</span>');
+  history.push({role:'user',content:text});
+  try{
+    const r=await askRetry();th.remove();render(r);speakReply(r);
+    history.push({role:'assistant',content:JSON.stringify(r)});
+  }catch(e){
+    th.remove();history.pop();
+    sys(e.name==='TimeoutError'?'Demorou demais. Tente de novo, ou troque o modelo em ⚙️ por um "flash-lite".':e.message==='nokey'?'Coloque sua chave do Gemini em ⚙️.':e.status===429?'Limite do Gemini atingido por agora. Espere um pouco e tente de novo.':(e.status===400||e.status===403)?'Chave ou modelo inválido. Confira em ⚙️.':e.status===404?'Modelo não encontrado. Troque o nome em ⚙️.':'Não consegui responder agora (erro: '+(e.status||e.name||e.message)+'). Tente de novo.');
+  }
+  busy=false;
+}
+
+function setMic(on){listening=on;mic.classList.toggle('on',on);mic.textContent=on?'⏹':'🎤';if(!on&&buf.trim()){const t=buf;buf='';send(t)}}
+mic.onclick=()=>{
+  if(listening){try{rec.stop()}catch(e){}return}
+  if(!rec){sys('Este navegador não tem reconhecimento de voz. Use o 🎤 do teclado do celular no campo de texto, ou abra no Chrome.');return}
+  speechSynthesis.cancel();buf='';try{rec.start()}catch(e){}
+};
+$('#go').onclick=()=>send(txt.value);
+txt.onkeydown=e=>{if(e.key==='Enter')send(txt.value)};
+$('#lang').onclick=e=>{
+  if(listening)return;
+  const pt=!(rec&&rec.lang==='pt-BR');
+  if(rec)rec.lang=pt?'pt-BR':'en-US';
+  e.target.textContent='🎙 '+(pt?'PT':'EN');
+  sys(pt?'Microfone em PORTUGUÊS: fale o que quer dizer e eu te ensino em inglês.':'Microfone em INGLÊS: fale em inglês e eu corrijo.');
+};
+$('#slow').onclick=e=>{slow=!slow;e.target.textContent='🐢 '+(slow?'sim':'não')};
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(SR){
+  rec=new SR();rec.lang='en-US';rec.interimResults=true;rec.continuous=false;
+  rec.onstart=()=>setMic(true);
+  rec.onresult=e=>{let f='',i='';for(const r of e.results){(r.isFinal?(f+=r[0].transcript):(i+=r[0].transcript))}buf=f||i;live.textContent='🎙 '+(f+i)};
+  rec.onend=()=>{setMic(false);live.textContent=''};
+  rec.onerror=()=>{buf='';setMic(false);sys('Não consegui usar o microfone. Permita o acesso ou use o 🎤 do teclado.')};
+}
+sys('Toque no 🎤, fale em inglês e eu corrijo com carinho! Se travar, fale em português que eu te ensino 😉');
+add('','<div>Hiii! I\'m Mia 😄 So, how\'s your day going?</div><div class="pt">🇧🇷 Oi! Eu sou a Mia. Como está seu dia?</div><button class="rep">🔊 ouvir</button>').querySelector('.rep').onclick=()=>say([['Hiii! I am Mia! So, how is your day going?','en-US',1],['Oi! Eu sou a Mia. Como está o seu dia?','pt-BR',1]]);
+</script>
+</body>
+</html>
